@@ -1,0 +1,9 @@
+name: pile-driver
+dependencies:
+  - numpy
+  - pandas
+  - pip
+  - python=3.8
+  - scipy
+  - pyqt
+  - watchdog
