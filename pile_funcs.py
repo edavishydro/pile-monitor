@@ -7,6 +7,7 @@ import configparser
 import time
 from collections import namedtuple
 import datetime as dt
+from tkinter import W
 import pandas as pd
 from pandas import ExcelWriter
 import numpy as np
@@ -42,9 +43,11 @@ def sumdb(s):
 
 def csel(s):
     """ same as sumdb; used as agg in pivot table"""
-    spa = 1e-6 * 10 ** (s / 20)
+    spa = 1e-6 * (10 ** (s / 10))
     sumpa = spa.sum()
-    return pa2db(sumpa)
+    sum_db = 10 * np.log10(sumpa / 1e-6)
+    print(sum_db)
+    return sum_db
 
 
 def meandb(s):
@@ -502,6 +505,8 @@ def process_files(
     )
     pt_total.columns = ["_".join(col).strip() for col in pt_total.columns.values]
     pt_total.reset_index(inplace=True)
+
+    print("HELP")
 
     pt_with_total = pd.concat([pt, pt_total], ignore_index=True)
     # filename	peakdb_max	peakdb_meandb	peakdb_nrStrikes	rms90db_max	rms90db_meandb	seldb_csel	seldb_meandb
