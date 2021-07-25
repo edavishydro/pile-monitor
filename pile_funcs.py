@@ -45,7 +45,7 @@ def csel(s):
     spa = 1e-6 * (10 ** (s / 10))
     sumpa = spa.sum()
     sum_db = 10 * np.log10(sumpa / 1e-6)
-    print(sum_db)
+    # print(sum_db)
     return sum_db
 
 
@@ -174,6 +174,9 @@ def list_peaks(peakixlst, splpa, samplerate, filename, datetime):
 
     min_db = pa2db(np.min(p10_lst))
 
+    if min_db <= 150:
+        min_db = 150
+
     return min_db, peaklist
 
 
@@ -211,11 +214,12 @@ def pile_peak_lst(
 
     p10_db, peaklist = list_peaks(peakixlst, splpa, samplerate, filename, datetime)
 
-    # Second iteration with smallest 10% max peak
-    print(f"Second iteration with {p10_db:.3f} min peak dB.")
-    peakixlst = peak_search(
-        splpa, p10_db, lookaheadrows, samplerate, interval_between_strikes
-    )
+    if p10_db > 150:
+        # Second iteration with smallest 10% max peak
+        print(f"Second iteration with {p10_db:.3f} min peak dB.")
+        peakixlst = peak_search(
+            splpa, p10_db, lookaheadrows, samplerate, interval_between_strikes
+        )
 
     peaklist = list_peaks(peakixlst, splpa, samplerate, filename, datetime)[1]
 
@@ -269,7 +273,11 @@ def compute_imp_wav_file_stats(
         splpa1[splpa1 <= 0] = 1e-6  # to accomodate log10
         spldb = 20 * np.log10(splpa1 / 1e-6)
         if pct_maxdb:  # if 0 then use given minpeakdb
-            minpeakdb = pct_maxdb * spldb.max()  # 0.9
+            if pct_maxdb * spldb.max() <= 150:
+                minpeakdb = 150
+            else:
+                minpeakdb = pct_maxdb * spldb.max()
+            # minpeakdb = pct_maxdb * spldb.max()  # 0.9
             filename_minpeakdb_dict[filename_short] = minpeakdb
 
         print(f"Initial minpeakdb: {minpeakdb:.3f}")
@@ -480,6 +488,24 @@ def process_files(
 
     # refer to jupyter notebook pile_summary_rpts.ipynb
     # dfdb = pd.read_excel('report_pilestrike_analysis.xlsx')
+
+    run_settings.update(filename_minpeakdb_dict)
+    print(f"Run settings:\n{filename_minpeakdb_dict}")
+
+    # output_excel(dfdb_round, pt_with_total, settings_df, report_xlsx_filename)
+
+    # print("Done. Created a report*.xlsx file.")
+    # if str_signal:
+    #     str_signal.emit("Done. Created a report*.xlsx and a summary.csv file.")
+    # if progress_signal:
+    #     progress_signal.emit(0)
+
+    # # ptsummary_lst = ptsummary.T.reset_index().values.T.tolist()
+    # # https://stackoverflow.com/questions/49176376/pandas-dataframe-to-lists-of-lists-including-headers
+    return dfdb, dfdb_round, report_xlsx_filename
+
+
+def summaries(dfdb, run_settings):
     pivot_values = ["peakdb", "sel90db", "rms90db"]
     aggfunc = {
         "peakdb": [nrStrikes, meandb, max],
@@ -487,6 +513,8 @@ def process_files(
         "rms90db": [meandb, max],
     }
     dfdb.reset_index(inplace=True)
+
+    print(dfdb.tail(10))
 
     pt = pd.pivot_table(dfdb, index="filename", values=pivot_values, aggfunc=aggfunc)
     pt.columns = ["_".join(col).strip() for col in pt.columns.values]
@@ -505,8 +533,6 @@ def process_files(
     pt_total.columns = ["_".join(col).strip() for col in pt_total.columns.values]
     pt_total.reset_index(inplace=True)
 
-    print("HELP")
-
     pt_with_total = pd.concat([pt, pt_total], ignore_index=True)
     # filename	peakdb_max	peakdb_meandb	peakdb_nrStrikes	rms90db_max	rms90db_meandb	seldb_csel	seldb_meandb
     pt_with_total = pt_with_total[
@@ -523,27 +549,16 @@ def process_files(
     ]
     pt_with_total = pt_with_total.round(decimals=2)
 
-    run_settings.update(filename_minpeakdb_dict)
-    # print(run_settings)
-
     settings_df = pd.DataFrame.from_dict(run_settings, orient="index").rename(
         columns={0: "setting"}
     )
 
-    output_excel(dfdb_round, pt_with_total, settings_df, report_xlsx_filename)
-
-    print("Done. Created a report*.xlsx file.")
-    # if str_signal:
-    #     str_signal.emit("Done. Created a report*.xlsx and a summary.csv file.")
-    # if progress_signal:
-    #     progress_signal.emit(0)
-
-    # # ptsummary_lst = ptsummary.T.reset_index().values.T.tolist()
-    # # https://stackoverflow.com/questions/49176376/pandas-dataframe-to-lists-of-lists-including-headers
-    return pt_with_total, dfdb_round
+    return pt_with_total, settings_df
 
 
-def process_dir(rootdir, all=False, str_signal=None, progress_signal=None):
+def process_dir(
+    rootdir, already_processed, all=False, str_signal=None, progress_signal=None
+):
     parser = configparser.ConfigParser()
     cfg_file = Path(rootdir, "monitor.cfg")
     if cfg_file.is_file():
@@ -557,7 +572,7 @@ def process_dir(rootdir, all=False, str_signal=None, progress_signal=None):
         hydr_sens = parser.getfloat("pile", "hydr_sens")
     else:
         print("monitor.cfg not found. Using default values.")
-        minpeakdb = 160
+        minpeakdb = 150
         interval_between_strikes = 0.75
         lookaheadtime = 0.050
         pct_maxdb = 0.0
@@ -585,8 +600,11 @@ def process_dir(rootdir, all=False, str_signal=None, progress_signal=None):
         files_imp_vib_wav = []
         for file in files:
             if fnmatch.fnmatch(file, "*.wav"):
-                # previously fnmatch.fnmatch(file, '*imp*.wav') or fnmatch.fnmatch(file, '*vib*.wav'):
-                files_imp_vib_wav.append(os.path.join(subdir, file))
+                if file in already_processed:
+                    print(f"{file} already processed.")
+                else:
+                    # previously fnmatch.fnmatch(file, '*imp*.wav') or fnmatch.fnmatch(file, '*vib*.wav'):
+                    files_imp_vib_wav.append(os.path.join(subdir, file))
         if files_imp_vib_wav:
             n1 = dt.datetime.now()
             # to_excel expects full filenames with paths!! Otherwise it throws exception 13.
@@ -594,7 +612,7 @@ def process_dir(rootdir, all=False, str_signal=None, progress_signal=None):
 
             # process_files([fn], minpeakdb, pct_maxdb, interval_between_strikes, lookaheadtime, run_settings)  # xxx
             # return files_imp_vib_wav
-            dfsummary, dfpeaks = process_files(
+            dfpeaks_raw, dfpeaks, report_name = process_files(
                 files_imp_vib_wav,
                 minpeakdb,
                 pct_maxdb,
@@ -609,5 +627,9 @@ def process_dir(rootdir, all=False, str_signal=None, progress_signal=None):
             print("process time ", (n2 - n1).microseconds / 1000, "seconds")
             if not all:
                 break  # stop recursion for pile monitor
+            else:
+                print("No files to process")
+                dfpeaks_raw = pd.DataFrame()
+                dfpeaks = pd.DataFrame()
 
-    return [run_settings, dfsummary, dfpeaks]
+    return [run_settings, dfpeaks_raw, dfpeaks, report_name]

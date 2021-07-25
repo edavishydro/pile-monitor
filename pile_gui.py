@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+from tkinter import W
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import pandas as pd
-import os
+import glob
+
+# import os
+from collections import defaultdict
 import pile_funcs
 from pathlib import Path
 
@@ -75,6 +79,11 @@ class Ui_MainWindow(object):
 
         self.pushButton.clicked.connect(self.setOutputDir)
         self.outputDir = ""
+        self.summ_df = pd.DataFrame()
+        self.strk_df = pd.DataFrame()
+        self.strk_raw = pd.DataFrame()
+        self.run_dict = dict()
+        self.xlsx_name = ""
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -86,16 +95,35 @@ class Ui_MainWindow(object):
         )
 
     def populate_data(self, dir1):
-        _o, summary, strikes = pile_funcs.process_dir(dir1)
-        strikes = strikes.reset_index().sort_values(axis=0, by=["filename", "ix"])
-        self.summaryTable.setModel(pandasModel(summary))
+        self.alr_proc = list()
+        self.run_dict, self.strk_raw, strikes, xlsx_name = pile_funcs.process_dir(
+            dir1, self.alr_proc
+        )
+        # print(self.strk_raw)
+        self.summ_df, self.run_df = pile_funcs.summaries(self.strk_raw, self.run_dict)
+        self.strk_df = strikes
+        self.xlsx_name = xlsx_name
+        strikes = self.strk_df.reset_index().sort_values(axis=0, by=["filename", "ix"])
+        self.summaryTable.setModel(pandasModel(self.summ_df))
         self.strikeTable.setModel(pandasModel(strikes))
+        pile_funcs.output_excel(self.strk_df, self.summ_df, self.run_df, xlsx_name)
+        self.alr_proc = [f for f in glob.glob("*.wav")]
 
     def repopulate_data(self):
-        _o, summary, strikes = pile_funcs.process_dir(self.outputDir)
-        strikes = strikes.reset_index().sort_values(axis=0, by=["filename", "ix"])
-        self.summaryTable.setModel(pandasModel(summary))
+        run_set, strikes_raw, strikes, xlsx_name = pile_funcs.process_dir(
+            self.outputDir, self.alr_proc
+        )
+        self.run_dict.update(run_set)
+        # print(self.strk_raw)
+        strikes_raw_2 = strikes_raw.reset_index()
+        self.strk_raw = self.strk_raw.append(strikes_raw_2).set_index("filename")
+        self.summ_df, self.run_df = pile_funcs.summaries(self.strk_raw, self.run_dict)
+        self.strk_df = self.strk_df.append(strikes)
+        strikes = self.strk_df.reset_index().sort_values(axis=0, by=["filename", "ix"])
+        self.summaryTable.setModel(pandasModel(self.summ_df))
         self.strikeTable.setModel(pandasModel(strikes))
+        pile_funcs.output_excel(self.strk_df, self.summ_df, self.run_df, xlsx_name)
+        self.alr_proc = [f for f in glob.glob("*.wav")]
 
     def setOutputDir(self):
         dirname = QtWidgets.QFileDialog.getExistingDirectory(None, "Choose directory")
@@ -145,7 +173,7 @@ class Watcher:
         # self.watch_dir = os.getcwd()
         # print(self.watch_dir)
         self.directory_to_watch = Path(filename)
-        print(self.directory_to_watch)
+        # print(self.directory_to_watch)
         self.emitter = Emitter()
         self.observer = Observer()
         self.event_handler = Handler(
@@ -163,29 +191,29 @@ class Watcher:
 
 
 class Handler(PatternMatchingEventHandler):
-    def __init__(self, *args, emitter=None, **kwargs):
+    def __init__(self, *args, emitter=Emitter(), **kwargs):
         super(Handler, self).__init__(*args, **kwargs)
         self._emitter = emitter
+        self.files = defaultdict(lambda: 0)
 
     def on_any_event(self, event):
+        last_event = ""
         if event.is_directory:
-            print("This is the thing!")
+            # print("This is the thing!")
+            pass
         elif event.event_type == "created":
             # Take any action here when a file is first created.
-            df = pile_funcs.process_dir(ui.outputDir)[2].reset_index()
-            # print(df)
+            last_event = event.src_path
+            df = pd.DataFrame()
             print("Received created event - %s." % event.src_path)
-            # df = pd.read_csv(event.src_path, header=1)
             self._emitter.newDataFrameSignal.emit(df.copy())
-            # df.set_index(df.columns.values.tolist()[0], inplace=True)
-            # append_df_to_excel(os.path.join(os.getcwd(), "myfile.xlsx"), df)
-        elif event.event_type == "modified":
-            # Taken any actionc here when a file is modified.
-            df = pile_funcs.process_dir(ui.outputDir)[2].reset_index()
-            # print("Received created event - %s." % event.src_path)
-            # df = pd.read_csv(event.src_path, header=1)
-            self._emitter.newDataFrameSignal.emit(df.copy())
-            print("Received modified event - %s." % event.src_path)
+        elif event.event_type == "modified" and event.src_path.endswith((".wav")):
+            if not event.src_path == last_event:  # files we haven't seen recently
+                # do something
+                print("api call with ", event.src_path)
+                df = pd.DataFrame()
+                self._emitter.newDataFrameSignal.emit(df.copy())
+                last_event = event.src_path
 
 
 if __name__ == "__main__":
