@@ -5,9 +5,8 @@ from PyQt5.QtCore import Qt
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import pandas as pd
-import glob
 
-# import os
+import os
 from collections import defaultdict
 import pile_funcs
 from pathlib import Path
@@ -107,7 +106,8 @@ class Ui_MainWindow(object):
         self.summaryTable.setModel(pandasModel(self.summ_df))
         self.strikeTable.setModel(pandasModel(strikes))
         pile_funcs.output_excel(self.strk_df, self.summ_df, self.run_df, xlsx_name)
-        self.alr_proc = [f for f in glob.glob("*.wav")]
+        self.alr_proc = [os.path.basename(f) for f in self.outputDir.rglob("*.wav")]
+        # print(self.alr_proc)
 
     def repopulate_data(self):
         run_set, strikes_raw, strikes, xlsx_name = pile_funcs.process_dir(
@@ -123,7 +123,7 @@ class Ui_MainWindow(object):
         self.summaryTable.setModel(pandasModel(self.summ_df))
         self.strikeTable.setModel(pandasModel(strikes))
         pile_funcs.output_excel(self.strk_df, self.summ_df, self.run_df, xlsx_name)
-        self.alr_proc = [f for f in glob.glob("*.wav")]
+        self.alr_proc = [os.path.basename(f) for f in self.outputDir.rglob("*.wav")]
 
     def setOutputDir(self):
         dirname = QtWidgets.QFileDialog.getExistingDirectory(None, "Choose directory")

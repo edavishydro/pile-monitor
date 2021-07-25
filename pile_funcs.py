@@ -216,7 +216,7 @@ def pile_peak_lst(
 
     if p10_db > 150:
         # Second iteration with smallest 10% max peak
-        print(f"Second iteration with {p10_db:.3f} min peak dB.")
+        print(f"Second iteration with {p10_db:.3f} dB minimum peak.")
         peakixlst = peak_search(
             splpa, p10_db, lookaheadrows, samplerate, interval_between_strikes
         )
@@ -280,7 +280,7 @@ def compute_imp_wav_file_stats(
             # minpeakdb = pct_maxdb * spldb.max()  # 0.9
             filename_minpeakdb_dict[filename_short] = minpeakdb
 
-        print(f"Initial minpeakdb: {minpeakdb:.3f}")
+        print(f"Initial minimum peak: {minpeakdb:.3f} dB")
         min_db, peaklist_sub = pile_peak_lst(
             filename_short,
             splpa1,
@@ -439,7 +439,7 @@ def process_files(
 
     peaklist = []
     print(
-        f"Processing {len(filenamelst):d} wav files in dir: {dirnameshort}"
+        f"Processing {len(filenamelst):d} wav files in dir: {dirnameshort}\n"
     )  # onscreen progress
     filetotal = len(filenamelst)
     for filenr, filename in enumerate(filenamelst):
@@ -464,7 +464,7 @@ def process_files(
                 continue
             peaklist.extend(peaklist_elm)
 
-        print(f"{filenr + 1}\\{filetotal}, { os.path.basename(filename)}")
+        print(f"{filenr + 1}\\{filetotal}, { os.path.basename(filename)}\n")
         if str_signal:
             str_signal.emit(f"{filenr + 1}\\{filetotal}, { os.path.basename(filename)}")
         if progress_signal:
@@ -490,7 +490,7 @@ def process_files(
     # dfdb = pd.read_excel('report_pilestrike_analysis.xlsx')
 
     run_settings.update(filename_minpeakdb_dict)
-    print(f"Run settings:\n{filename_minpeakdb_dict}")
+    # print(f"Run settings:\n{filename_minpeakdb_dict}")
 
     # output_excel(dfdb_round, pt_with_total, settings_df, report_xlsx_filename)
 
@@ -514,7 +514,7 @@ def summaries(dfdb, run_settings):
     }
     dfdb.reset_index(inplace=True)
 
-    print(dfdb.tail(10))
+    # print(dfdb.tail(10))
 
     pt = pd.pivot_table(dfdb, index="filename", values=pivot_values, aggfunc=aggfunc)
     pt.columns = ["_".join(col).strip() for col in pt.columns.values]
